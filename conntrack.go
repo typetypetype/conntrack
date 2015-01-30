@@ -99,23 +99,21 @@ func (c *ConnTrack) track() error {
 			if !ok {
 				return nil
 			}
-			typ := e.flowtype()
-			state := e.state()
 			switch {
 
 			default:
 				// don't care about this event
 
-			case state == "ESTABLISHED":
-				cn := e.conn(local)
+			case e.TCPState == "ESTABLISHED":
+				cn := e.ConnTCP(local)
 				if cn == nil {
 					log.Printf("not a connection: %+v\n", e)
 					continue
 				}
 				established[*cn] = struct{}{}
 
-			case typ == "destroy", state == "TIME_WAIT", state == "CLOSE":
-				cn := e.conn(local)
+			case e.MsgType == NfctMsgDestroy, e.TCPState == "TIME_WAIT", e.TCPState == "CLOSE":
+				cn := e.ConnTCP(local)
 				if cn == nil {
 					log.Printf("not a connection: %+v\n", e)
 					continue
