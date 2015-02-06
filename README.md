@@ -9,7 +9,7 @@ teared down in between calls to `c.Connections()` will also be reported.
 
 # status
 
-proof-of-concept
+seems to work
 
 # todo
 

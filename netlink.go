@@ -5,11 +5,9 @@ import (
 	"syscall"
 )
 
-const ()
-
 // NFNL_MSG_TYPE
 func nflnMsgType(x uint16) uint8 {
-	return uint8(x & 0x00ff) // AFAIK that's the same.
+	return uint8(x & 0x00ff)
 }
 
 // NFNL_SUBSYS_ID

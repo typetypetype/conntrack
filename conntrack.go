@@ -18,13 +18,14 @@ func (c ConnTCP) String() string {
 	return fmt.Sprintf("%s:%s->%s:%s", c.Local, c.LocalPort, c.Remote, c.RemotePort)
 }
 
-// ConnTrack monitors the connections.
+// ConnTrack monitors the connections. It is build with Established() and
+// Follow().
 type ConnTrack struct {
 	connReq chan chan []ConnTCP
 	quit    chan struct{}
 }
 
-// New returns a ConnTrack
+// New returns a ConnTrack.
 func New() (*ConnTrack, error) {
 	c := ConnTrack{
 		connReq: make(chan chan []ConnTCP),
@@ -102,12 +103,12 @@ func (c *ConnTrack) track() error {
 			switch {
 
 			default:
-				// don't care about this event
+				// not interested
 
 			case e.TCPState == "ESTABLISHED":
 				cn := e.ConnTCP(local)
 				if cn == nil {
-					log.Printf("not a connection: %+v\n", e)
+					// log.Printf("not a local connection: %+v\n", e)
 					continue
 				}
 				established[*cn] = struct{}{}
@@ -115,7 +116,7 @@ func (c *ConnTrack) track() error {
 			case e.MsgType == NfctMsgDestroy, e.TCPState == "TIME_WAIT", e.TCPState == "CLOSE":
 				cn := e.ConnTCP(local)
 				if cn == nil {
-					log.Printf("not a connection: %+v\n", e)
+					// log.Printf("not a local connection: %+v\n", e)
 					continue
 				}
 				if _, ok := established[*cn]; !ok {

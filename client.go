@@ -15,6 +15,10 @@ type nfgenmsg struct {
 	ResID   uint16 /* resource id */
 }
 
+const (
+	sizeofGenmsg = uint32(unsafe.Sizeof(nfgenmsg{})) // TODO
+)
+
 type ConntrackListReq struct {
 	Header syscall.NlMsghdr
 	Body   nfgenmsg
@@ -34,10 +38,6 @@ func (c *ConntrackListReq) toWireFormat() []byte {
 	return b
 }
 
-const (
-	sizeofGenmsg = uint32(unsafe.Sizeof(nfgenmsg{})) // TODO
-)
-
 func connectNetfilter(groups uint32) (int, *syscall.SockaddrNetlink, error) {
 	s, err := syscall.Socket(syscall.AF_NETLINK, syscall.SOCK_RAW, syscall.NETLINK_NETFILTER)
 	if err != nil {
@@ -53,7 +53,7 @@ func connectNetfilter(groups uint32) (int, *syscall.SockaddrNetlink, error) {
 	return s, lsa, nil
 }
 
-// All Established TCP connections.
+// Established lists all established TCP connections.
 func Established() ([]ConnTCP, error) {
 	s, lsa, err := connectNetfilter(0)
 	if err != nil {
@@ -99,7 +99,7 @@ func Established() ([]ConnTCP, error) {
 	return conns, nil
 }
 
-// Follow all connection changes.
+// Follow gives a channel with all changes.
 func Follow() (<-chan Conn, func(), error) {
 	s, _, err := connectNetfilter(NF_NETLINK_CONNTRACK_NEW | NF_NETLINK_CONNTRACK_UPDATE | NF_NETLINK_CONNTRACK_DESTROY)
 	stop := func() {
@@ -132,8 +132,6 @@ func readMsgs(s int, cb func(Conn)) error {
 		if err != nil {
 			return err
 		}
-		// fmt.Printf("reply bytes: %q (%d)\n", rb[:nr], nr)
-		// fmt.Printf("reply bytes: %d\n", nr)
 
 		msgs, err := syscall.ParseNetlinkMessage(rb[:nr])
 		if err != nil {
@@ -169,12 +167,6 @@ func readMsgs(s int, cb func(Conn)) error {
 			}
 
 			cb(*conn)
-			// if conn.TCPState != 3 {
-			// // 3 is TCP established.
-			// continue
-			// }
-			// fmt.Printf("Conn: %+v / %s\n", conn, err)
-			// fmt.Printf("\n")
 		}
 	}
 }
@@ -230,10 +222,8 @@ func parsePayload(b []byte) (*Conn, error) {
 		return conn, err
 	}
 	for _, attr := range attrs {
-		// fmt.Printf("pl: %d, type: %d, multi: %t, bigend: %t\n", len(attr.Msg), attr.Typ, attr.IsNested, attr.IsNetByteorder)
 		switch CtattrType(attr.Typ) {
 		case CtaTupleOrig:
-			// fmt.Printf("It's an orig\n")
 		case CtaTupleReply:
 			// fmt.Printf("It's a reply\n")
 			// We take the reply, nor the orig.... Sure?
@@ -243,18 +233,7 @@ func parsePayload(b []byte) (*Conn, error) {
 			// status := binary.BigEndian.Uint32(attr.Msg)
 			// fmt.Printf("It's status %d\n", status)
 		case CtaProtoinfo:
-			// fmt.Printf("It's a protoinfo: (%q)\n", attr.Msg)
 			parseProtoinfo(attr.Msg, conn)
-		case CtaTimeout:
-			// fmt.Printf("It's a timeout\n")
-		case CtaMark:
-			// fmt.Printf("It's a mark\n")
-		case CtaUse:
-			// fmt.Printf("It's a use\n")
-		case CtaId:
-			// fmt.Printf("It's a id\n")
-		default:
-			fmt.Printf("It's something else: %d\n", attr.Typ)
 		}
 	}
 	return conn, nil
@@ -312,22 +291,10 @@ func parseProto(b []byte, conn *Conn) error {
 		switch CtattrL4proto(attr.Typ) {
 		case CtaProtoNum:
 			conn.Proto = int(uint8(attr.Msg[0]))
-			// if protoNum == syscall.IPPROTO_TCP {
-			// isTCP = true
-			// }
-			// fmt.Printf("Proto num: %d (TCP: %t)\n", protoNum, isTCP)
 		case CtaProtoSrcPort:
 			conn.SrcPort = binary.BigEndian.Uint16(attr.Msg)
-			// fmt.Printf("Proto src port: %d\n", srcPort)
 		case CtaProtoDstPort:
 			conn.DstPort = binary.BigEndian.Uint16(attr.Msg)
-			// fmt.Printf("Proto dst port: %d\n", dstPort)
-		case CtaProtoIcmpId:
-		case CtaProtoIcmpType:
-		case CtaProtoIcmpCode:
-		case CtaProtoIcmpv6Id:
-		case CtaProtoIcmpv6Type:
-		case CtaProtoIcmpv6Code:
 		}
 	}
 	return nil
