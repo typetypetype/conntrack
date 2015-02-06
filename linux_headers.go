@@ -15,3 +15,13 @@ const (
 	IpctnlMsgMax CntlMsgTypes = 8
 )
 
+type CtattrCounters int
+const (
+	CtaCountersUnspec CtattrCounters = 0
+	CtaCountersPackets CtattrCounters = 1
+	CtaCountersBytes CtattrCounters = 2
+	CtaCounters32Packets CtattrCounters = 3
+	CtaCounters32Bytes CtattrCounters = 4
+	CtaCountersMax CtattrCounters = 5
+)
+

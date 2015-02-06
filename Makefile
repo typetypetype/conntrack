@@ -13,6 +13,7 @@ CONNTRACK_ENUMS=nf_conntrack_query \
 				ctattr_l4proto \
 
 LINUX_ENUMS=cntl_msg_types \
+			ctattr_counters \
 
 all: test vet lint
 

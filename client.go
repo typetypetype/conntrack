@@ -3,8 +3,6 @@ package conntrack
 import (
 	"encoding/binary"
 	"fmt"
-	"net"
-	"strconv"
 	"syscall"
 	"unsafe"
 )
@@ -61,7 +59,6 @@ func Established() ([]ConnTCP, error) {
 	}
 	defer syscall.Close(s)
 
-	var conns []ConnTCP
 	msg := ConntrackListReq{
 		Header: syscall.NlMsghdr{
 			Len:   syscall.NLMSG_HDRLEN + sizeofGenmsg,
@@ -82,7 +79,10 @@ func Established() ([]ConnTCP, error) {
 		return nil, err
 	}
 
-	local := localIPs()
+	var (
+		local = localIPs()
+		conns []ConnTCP
+	)
 	readMsgs(s, func(c Conn) {
 		if c.MsgType != NfctMsgUpdate {
 			fmt.Printf("msg isn't an update: %d\n", c.MsgType)
@@ -113,10 +113,6 @@ func Follow() (<-chan Conn, func(), error) {
 	go func() {
 		defer syscall.Close(s)
 		if err := readMsgs(s, func(c Conn) {
-			// if conn.TCPState != 3 {
-			// // 3 is TCP established.
-			// continue
-			// }
 			res <- c
 		}); err != nil {
 			panic(err)
@@ -174,40 +170,49 @@ func readMsgs(s int, cb func(Conn)) error {
 type Conn struct {
 	MsgType  NfConntrackMsg
 	Proto    int
-	Src      net.IP
+	Src      IP // net.IP
 	SrcPort  uint16
-	Dst      net.IP
+	Dst      IP // net.IP
 	DstPort  uint16
-	TCPState string
+	TCPState string // TODO: int
+	Packets  uint64
+	Bytes    uint64
+}
+
+// connTuple is a hashable connection ID
+type connTuple struct {
+	Proto   int
+	Src     IP // net.IP
+	SrcPort uint16
+	Dst     IP // net.IP
+	DstPort uint16
 }
 
 // ConnTCP decides which way this connection is going and makes a ConnTCP.
-func (c Conn) ConnTCP(local map[string]struct{}) *ConnTCP {
+func (c Conn) ConnTCP(local map[IP]struct{}) *ConnTCP {
 	// conntrack gives us all connections, even things passing through, but it
 	// doesn't tell us what the local IP is. So we use `local` as a guide
 	// what's local.
-	src := c.Src.String()
-	dst := c.Dst.String()
-	_, srcLocal := local[src]
-	_, dstLocal := local[dst]
+	_, srcLocal := local[c.Src]
+	_, dstLocal := local[c.Dst]
 	// If both are local we must just order things predictably.
 	if srcLocal && dstLocal {
 		srcLocal = c.SrcPort < c.DstPort
 	}
 	if srcLocal {
 		return &ConnTCP{
-			Local:      src,
-			LocalPort:  strconv.Itoa(int(c.SrcPort)),
-			Remote:     dst,
-			RemotePort: strconv.Itoa(int(c.DstPort)),
+			Local:      c.Src,
+			LocalPort:  c.SrcPort,
+			Remote:     c.Dst,
+			RemotePort: c.DstPort,
 		}
 	}
 	if dstLocal {
 		return &ConnTCP{
-			Local:      dst,
-			LocalPort:  strconv.Itoa(int(c.DstPort)),
-			Remote:     src,
-			RemotePort: strconv.Itoa(int(c.SrcPort)),
+			Local:      c.Dst,
+			LocalPort:  c.DstPort,
+			Remote:     c.Src,
+			RemotePort: c.SrcPort,
 		}
 	}
 	// Neither is local. conntrack also reports NAT connections.
@@ -234,6 +239,10 @@ func parsePayload(b []byte) (*Conn, error) {
 			// fmt.Printf("It's status %d\n", status)
 		case CtaProtoinfo:
 			parseProtoinfo(attr.Msg, conn)
+		case CtaCountersOrig:
+			parseCounters(attr.Msg, conn)
+			// case CtaCountersReply:
+			// parseCounters(attr.Msg, conn)
 		}
 	}
 	return conn, nil
@@ -270,9 +279,9 @@ func parseIP(b []byte, conn *Conn) error {
 	for _, attr := range attrs {
 		switch CtattrIp(attr.Typ) {
 		case CtaIpV4Src:
-			conn.Src = net.IP(attr.Msg) // TODO: copy so we can reuse the buffer?
+			conn.Src = NewIP(attr.Msg)
 		case CtaIpV4Dst:
-			conn.Dst = net.IP(attr.Msg) // TODO: copy so we can reuse the buffer?
+			conn.Dst = NewIP(attr.Msg)
 		case CtaIpV6Src:
 			// TODO
 		case CtaIpV6Dst:
@@ -329,6 +338,22 @@ func parseProtoinfoTCP(b []byte, conn *Conn) error {
 			conn.TCPState = tcpState[uint8(attr.Msg[0])]
 		default:
 			// not interested
+		}
+	}
+	return nil
+}
+
+func parseCounters(b []byte, conn *Conn) error {
+	attrs, err := parseAttrs(b)
+	if err != nil {
+		return fmt.Errorf("invalid counter attr: %s", err)
+	}
+	for _, attr := range attrs {
+		switch CtattrCounters(attr.Typ) {
+		case CtaCountersPackets:
+			conn.Packets = binary.BigEndian.Uint64(attr.Msg)
+		case CtaCountersBytes:
+			conn.Bytes = binary.BigEndian.Uint64(attr.Msg)
 		}
 	}
 	return nil

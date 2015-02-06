@@ -6,16 +6,19 @@ import (
 	"time"
 )
 
-// ConnTCP is a connection
+// ConnTCP is a connection. Call .Net() on the IPs to get net.IP values.
 type ConnTCP struct {
-	Local      string // net.IP
-	LocalPort  string // int
-	Remote     string // net.IP
-	RemotePort string // int
+	Local      IP
+	LocalPort  uint16
+	Remote     IP
+	RemotePort uint16
 }
 
 func (c ConnTCP) String() string {
-	return fmt.Sprintf("%s:%s->%s:%s", c.Local, c.LocalPort, c.Remote, c.RemotePort)
+	return fmt.Sprintf("%s:%d->%s:%d",
+		c.Local, c.LocalPort,
+		c.Remote, c.RemotePort,
+	)
 }
 
 // ConnTrack monitors the connections. It is build with Established() and
@@ -80,7 +83,8 @@ func (c *ConnTrack) track() error {
 	for _, c := range cs {
 		established[c] = struct{}{}
 	}
-	// we keep track of deleted so we can report them
+	// we keep track of deleted so we can report them, with their final traffic
+	// counts.
 	deleted := map[ConnTCP]struct{}{}
 
 	local := localIPs()
@@ -108,7 +112,7 @@ func (c *ConnTrack) track() error {
 			case e.TCPState == "ESTABLISHED":
 				cn := e.ConnTCP(local)
 				if cn == nil {
-					// log.Printf("not a local connection: %+v\n", e)
+					// not a local connection
 					continue
 				}
 				established[*cn] = struct{}{}
@@ -116,7 +120,7 @@ func (c *ConnTrack) track() error {
 			case e.MsgType == NfctMsgDestroy, e.TCPState == "TIME_WAIT", e.TCPState == "CLOSE":
 				cn := e.ConnTCP(local)
 				if cn == nil {
-					// log.Printf("not a local connection: %+v\n", e)
+					// not a local connection
 					continue
 				}
 				if _, ok := established[*cn]; !ok {
