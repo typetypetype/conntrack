@@ -187,6 +187,12 @@ type Conn struct {
 
 	// For multitenancy.
 	Zone uint16
+
+	// Flow stats.
+	ReplyPktLen uint64
+	ReplyPktCount uint64
+	OrigPktLen uint64
+	OrigPktCount uint64
 }
 
 // ConnTCP decides which way this connection is going and makes a ConnTCP.
@@ -236,6 +242,10 @@ func parsePayload(b []byte) (*Conn, error) {
 			// fmt.Printf("It's a reply\n")
 			// We take the reply, nor the orig.... Sure?
 			parseTuple(attr.Msg, conn)
+		case CtaCountersOrig:
+			conn.OrigPktLen, conn.OrigPktCount, _ = parseCounters(attr.Msg)
+		case CtaCountersReply:
+			conn.ReplyPktLen, conn.ReplyPktCount, _ = parseCounters(attr.Msg)
 		case CtaStatus:
 			// These are ip_conntrack_status
 			// status := binary.BigEndian.Uint32(attr.Msg)
@@ -272,6 +282,24 @@ func parseTuple(b []byte, conn *Conn) error {
 		}
 	}
 	return nil
+}
+
+func parseCounters(b []byte) (uint64, uint64, error) {
+	attrs, err := parseAttrs(b)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid tuple attr: %s", err)
+	}
+	packets := uint64(0)
+	bytes := uint64(0)
+	for _, attr := range attrs {
+		switch CtattrCounters(attr.Typ) {
+		case CtaCountersPackets:
+			packets = binary.BigEndian.Uint64(attr.Msg)
+		case CtaCountersBytes:
+			bytes = binary.BigEndian.Uint64(attr.Msg)
+		}
+	}
+	return packets, bytes, nil
 }
 
 func parseIP(b []byte, conn *Conn) error {

@@ -39,6 +39,16 @@ const (
 	CtaTupleMax CtattrTuple = 3
 )
 
+type CtattrCounters int
+const (
+	CtaCountersUnspec CtattrCounters = 0
+	CtaCountersPackets CtattrCounters = 1		/* 64bit counters */
+	CtaCountersBytes CtattrCounters = 2		/* 64bit counters */
+	CtaCounters32Packets CtattrCounters = 3		/* old 32bit counters, unused */
+	CtaCounters32Bytes CtattrCounters = 4		/* old 32bit counters, unused */
+	CtaCountersMax CtattrCounters = 5
+)
+
 type CtattrIp int
 const (
 	CtaIpUnspec CtattrIp = 0
