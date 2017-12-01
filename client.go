@@ -181,6 +181,9 @@ type Conn struct {
 	IcmpId   uint16
 	IcmpType uint8
 	IcmpCode uint8
+
+	// ct.mark, used to set permission type of the flow.
+	CtMark uint32
 }
 
 // ConnTCP decides which way this connection is going and makes a ConnTCP.
@@ -236,6 +239,8 @@ func parsePayload(b []byte) (*Conn, error) {
 			// fmt.Printf("It's status %d\n", status)
 		case CtaProtoinfo:
 			parseProtoinfo(attr.Msg, conn)
+		case CtaMark:
+			conn.CtMark = binary.BigEndian.Uint32(attr.Msg)
 		}
 	}
 	return conn, nil
