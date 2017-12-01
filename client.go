@@ -184,6 +184,9 @@ type Conn struct {
 
 	// ct.mark, used to set permission type of the flow.
 	CtMark uint32
+
+	// For multitenancy.
+	Zone uint16
 }
 
 // ConnTCP decides which way this connection is going and makes a ConnTCP.
@@ -241,6 +244,8 @@ func parsePayload(b []byte) (*Conn, error) {
 			parseProtoinfo(attr.Msg, conn)
 		case CtaMark:
 			conn.CtMark = binary.BigEndian.Uint32(attr.Msg)
+		case CtaZone:
+			conn.Zone = binary.BigEndian.Uint16(attr.Msg)
 		}
 	}
 	return conn, nil
