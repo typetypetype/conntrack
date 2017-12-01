@@ -151,9 +151,6 @@ func readMsgs(s int, cb func(Conn)) error {
 			if err != nil {
 				return err
 			}
-			if conn.Proto != syscall.IPPROTO_TCP {
-				continue
-			}
 
 			// Taken from conntrack/parse.c:__parse_message_type
 			switch CntlMsgTypes(nflnMsgType(msg.Header.Type)) {
@@ -179,6 +176,11 @@ type Conn struct {
 	Dst      net.IP
 	DstPort  uint16
 	TCPState string
+
+	// ICMP stuff.
+	IcmpId   uint16
+	IcmpType uint8
+	IcmpCode uint8
 }
 
 // ConnTCP decides which way this connection is going and makes a ConnTCP.
@@ -289,12 +291,23 @@ func parseProto(b []byte, conn *Conn) error {
 	}
 	for _, attr := range attrs {
 		switch CtattrL4proto(attr.Typ) {
+		// Protocol number.
 		case CtaProtoNum:
 			conn.Proto = int(uint8(attr.Msg[0]))
+
+		// TCP stuff.
 		case CtaProtoSrcPort:
 			conn.SrcPort = binary.BigEndian.Uint16(attr.Msg)
 		case CtaProtoDstPort:
 			conn.DstPort = binary.BigEndian.Uint16(attr.Msg)
+
+		// ICMP stuff.
+		case CtaProtoIcmpId:
+			conn.IcmpId = binary.BigEndian.Uint16(attr.Msg)
+		case CtaProtoIcmpType:
+			conn.IcmpType = uint8(attr.Msg[0])
+		case CtaProtoIcmpCode:
+			conn.IcmpCode = uint8(attr.Msg[0])
 		}
 	}
 	return nil
