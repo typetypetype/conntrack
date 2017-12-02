@@ -6,7 +6,6 @@ import (
 	"net"
 	"strconv"
 	"syscall"
-	"os"
 	"unsafe"
 )
 
@@ -189,6 +188,9 @@ type Conn struct {
 	// ct.mark, used to set permission type of the flow.
 	CtMark uint32
 
+	// ct.id, used to identify connections.
+	CtId uint32
+
 	// For multitenancy.
 	Zone uint16
 
@@ -260,6 +262,8 @@ func parsePayload(b []byte) (*Conn, error) {
 			conn.CtMark = binary.BigEndian.Uint32(attr.Msg)
 		case CtaZone:
 			conn.Zone = binary.BigEndian.Uint16(attr.Msg)
+		case CtaId:
+			conn.CtId = binary.BigEndian.Uint32(attr.Msg)
 		}
 	}
 	return conn, nil
