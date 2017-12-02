@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"syscall"
+	"os"
 	"unsafe"
 )
 
@@ -50,6 +51,7 @@ func connectNetfilter(groups uint32) (int, *syscall.SockaddrNetlink, error) {
 	if err := syscall.Bind(s, lsa); err != nil {
 		return 0, nil, err
 	}
+
 	return s, lsa, nil
 }
 
@@ -101,7 +103,9 @@ func Established() ([]ConnTCP, error) {
 
 // Follow gives a channel with all changes.
 func Follow() (<-chan Conn, func(), error) {
-	s, _, err := connectNetfilter(NF_NETLINK_CONNTRACK_NEW | NF_NETLINK_CONNTRACK_UPDATE | NF_NETLINK_CONNTRACK_DESTROY)
+	s, _, err := connectNetfilter(
+		NF_NETLINK_CONNTRACK_NEW | NF_NETLINK_CONNTRACK_UPDATE |
+		NF_NETLINK_CONNTRACK_DESTROY)
 	stop := func() {
 		syscall.Close(s)
 	}
@@ -127,7 +131,7 @@ func Follow() (<-chan Conn, func(), error) {
 
 func readMsgs(s int, cb func(Conn)) error {
 	for {
-		rb := make([]byte, syscall.Getpagesize()) // TODO: re-use
+		rb := make([]byte, 2*syscall.Getpagesize()) // TODO: re-use
 		nr, _, err := syscall.Recvfrom(s, rb, 0)
 		if err != nil {
 			return err
