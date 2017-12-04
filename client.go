@@ -54,15 +54,14 @@ func connectNetfilter(groups uint32) (int, *syscall.SockaddrNetlink, error) {
 	return s, lsa, nil
 }
 
-// Established lists all established TCP connections.
-func Established() ([]ConnTCP, error) {
+// Make syscall asking for all connections. Invoke 'cb' for each connection.
+func queryAllConnections(cb func(Conn)) error {
 	s, lsa, err := connectNetfilter(0)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer syscall.Close(s)
 
-	var conns []ConnTCP
 	msg := ConntrackListReq{
 		Header: syscall.NlMsghdr{
 			Len:   syscall.NLMSG_HDRLEN + sizeofGenmsg,
@@ -80,11 +79,26 @@ func Established() ([]ConnTCP, error) {
 	wb := msg.toWireFormat()
 	// fmt.Printf("msg bytes: %q\n", wb)
 	if err := syscall.Sendto(s, wb, 0, lsa); err != nil {
-		return nil, err
+		return err
 	}
 
+	return readMsgs(s, cb)
+}
+
+// Lists all the connections that conntrack is tracking.
+func Connections() ([]Conn, error) {
+	var conns []Conn
+	queryAllConnections(func(c Conn) {
+		conns = append(conns, c)
+	})
+	return conns, nil
+}
+
+// Established lists all established TCP connections.
+func Established() ([]ConnTCP, error) {
+	var conns []ConnTCP
 	local := localIPs()
-	readMsgs(s, func(c Conn) {
+	err := queryAllConnections(func(c Conn) {
 		if c.MsgType != NfctMsgUpdate {
 			fmt.Printf("msg isn't an update: %d\n", c.MsgType)
 			return
@@ -97,6 +111,9 @@ func Established() ([]ConnTCP, error) {
 			conns = append(conns, *tc)
 		}
 	})
+	if err != nil {
+		return nil, err
+	}
 	return conns, nil
 }
 
