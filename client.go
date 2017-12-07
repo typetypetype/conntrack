@@ -357,7 +357,6 @@ func parseProto(b []byte, conn *Conn, isSrc bool) error {
 	}
 
 	for _, attr := range attrs {
-		bufreader := bytes.NewReader(attr.Msg)
 		switch CtattrL4proto(attr.Typ) {
 		// Protocol number.
 		case CtaProtoNum:
@@ -377,12 +376,14 @@ func parseProto(b []byte, conn *Conn, isSrc bool) error {
 				conn.DestIcmpId = binary.BigEndian.Uint16(attr.Msg)
 			}
 		case CtaProtoIcmpType:
+			bufreader := bytes.NewReader(attr.Msg)
 			if isSrc {
 				binary.Read(bufreader, binary.BigEndian, &conn.SrcIcmpType)
 			} else {
 				binary.Read(bufreader, binary.BigEndian, conn.DestIcmpType)
 			}
 		case CtaProtoIcmpCode:
+			bufreader := bytes.NewReader(attr.Msg)
 			if isSrc {
 				binary.Read(bufreader, binary.BigEndian, conn.SrcIcmpCode)
 			} else {
