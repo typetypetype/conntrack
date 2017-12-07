@@ -146,8 +146,8 @@ func Follow() (<-chan Conn, func(), error) {
 }
 
 func readMsgs(s int, cb func(Conn)) error {
+	rb := make([]byte, 2*syscall.Getpagesize())
 	for {
-		rb := make([]byte, 2*syscall.Getpagesize()) // TODO: re-use
 		nr, _, err := syscall.Recvfrom(s, rb, 0)
 		if err != nil {
 			return err
