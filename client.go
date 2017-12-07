@@ -380,14 +380,14 @@ func parseProto(b []byte, conn *Conn, isSrc bool) error {
 			if isSrc {
 				binary.Read(bufreader, binary.BigEndian, &conn.SrcIcmpType)
 			} else {
-				binary.Read(bufreader, binary.BigEndian, conn.DestIcmpType)
+				binary.Read(bufreader, binary.BigEndian, &conn.DestIcmpType)
 			}
 		case CtaProtoIcmpCode:
 			bufreader := bytes.NewReader(attr.Msg)
 			if isSrc {
-				binary.Read(bufreader, binary.BigEndian, conn.SrcIcmpCode)
+				binary.Read(bufreader, binary.BigEndian, &conn.SrcIcmpCode)
 			} else {
-				binary.Read(bufreader, binary.BigEndian, conn.DestIcmpCode)
+				binary.Read(bufreader, binary.BigEndian, &conn.DestIcmpCode)
 			}
 		}
 	}
