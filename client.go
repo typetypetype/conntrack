@@ -1,6 +1,7 @@
 package conntrack
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -198,9 +199,12 @@ type Conn struct {
 	TCPState string
 
 	// ICMP stuff.
-	IcmpId   uint16
-	IcmpType uint8
-	IcmpCode uint8
+	SrcIcmpId   uint16
+	SrcIcmpType uint8
+	SrcIcmpCode uint8
+	DestIcmpId   uint16
+	DestIcmpType uint8
+	DestIcmpCode uint8
 
 	// ct.mark, used to set permission type of the flow.
 	CtMark uint32
@@ -261,10 +265,9 @@ func parsePayload(b []byte) (*Conn, error) {
 	for _, attr := range attrs {
 		switch CtattrType(attr.Typ) {
 		case CtaTupleOrig:
+			parseTuple(attr.Msg, conn, true /* isSrc */)
 		case CtaTupleReply:
-			// fmt.Printf("It's a reply\n")
-			// We take the reply, nor the orig.... Sure?
-			parseTuple(attr.Msg, conn)
+			parseTuple(attr.Msg, conn, false /* isSrc */)
 		case CtaCountersOrig:
 			conn.OrigPktLen, conn.OrigPktCount, _ = parseCounters(attr.Msg)
 		case CtaCountersReply:
@@ -286,7 +289,7 @@ func parsePayload(b []byte) (*Conn, error) {
 	return conn, nil
 }
 
-func parseTuple(b []byte, conn *Conn) error {
+func parseTuple(b []byte, conn *Conn, isSrc bool) error {
 	attrs, err := parseAttrs(b)
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
@@ -303,7 +306,7 @@ func parseTuple(b []byte, conn *Conn) error {
 			}
 		case CtaTupleProto:
 			// fmt.Printf("It's a tuple proto\n")
-			parseProto(attr.Msg, conn)
+			parseProto(attr.Msg, conn, isSrc)
 		}
 	}
 	return nil
@@ -347,12 +350,14 @@ func parseIP(b []byte, conn *Conn) error {
 	return nil
 }
 
-func parseProto(b []byte, conn *Conn) error {
+func parseProto(b []byte, conn *Conn, isSrc bool) error {
 	attrs, err := parseAttrs(b)
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
 	}
+
 	for _, attr := range attrs {
+		bufreader := bytes.NewReader(attr.Msg)
 		switch CtattrL4proto(attr.Typ) {
 		// Protocol number.
 		case CtaProtoNum:
@@ -366,13 +371,26 @@ func parseProto(b []byte, conn *Conn) error {
 
 		// ICMP stuff.
 		case CtaProtoIcmpId:
-			conn.IcmpId = binary.BigEndian.Uint16(attr.Msg)
+			if isSrc {
+				conn.SrcIcmpId = binary.BigEndian.Uint16(attr.Msg)
+			} else {
+				conn.DestIcmpId = binary.BigEndian.Uint16(attr.Msg)
+			}
 		case CtaProtoIcmpType:
-			conn.IcmpType = uint8(attr.Msg[0])
+			if isSrc {
+				binary.Read(bufreader, binary.BigEndian, &conn.SrcIcmpType)
+			} else {
+				binary.Read(bufreader, binary.BigEndian, conn.DestIcmpType)
+			}
 		case CtaProtoIcmpCode:
-			conn.IcmpCode = uint8(attr.Msg[0])
+			if isSrc {
+				binary.Read(bufreader, binary.BigEndian, conn.SrcIcmpCode)
+			} else {
+				binary.Read(bufreader, binary.BigEndian, conn.DestIcmpCode)
+			}
 		}
 	}
+
 	return nil
 }
 
