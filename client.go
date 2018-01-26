@@ -150,7 +150,11 @@ func readMsgs(s int, cb func(Conn)) error {
 	rb := make([]byte, 2*syscall.Getpagesize())
 	for {
 		nr, _, err := syscall.Recvfrom(s, rb, 0)
-		if err != nil {
+		if err == syscall.ENOBUFS {
+			// ENOBUF means we miss some events here. No way around it. That's life.
+			cb(Conn{Err: syscall.ENOBUFS})
+			continue
+		} else if err != nil {
 			return err
 		}
 
@@ -220,6 +224,9 @@ type Conn struct {
 	ReplyPktCount uint64
 	OrigPktLen uint64
 	OrigPktCount uint64
+
+	// Error, if any.
+	Err error
 }
 
 // ConnTCP decides which way this connection is going and makes a ConnTCP.
