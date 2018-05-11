@@ -269,6 +269,8 @@ func parsePayload(b []byte) (*Conn, error) {
 	if err != nil {
 		return conn, err
 	}
+	conn.Dst = nil
+	conn.Src = nil
 	for _, attr := range attrs {
 		switch CtattrType(attr.Typ) {
 		case CtaTupleOrig:
@@ -345,9 +347,11 @@ func parseIP(b []byte, conn *Conn) error {
 	for _, attr := range attrs {
 		switch CtattrIp(attr.Typ) {
 		case CtaIpV4Src:
-			conn.Src = net.IP(attr.Msg) // TODO: copy so we can reuse the buffer?
+			conn.Src = make(net.IP, len(attr.Msg))
+			copy(conn.Src, attr.Msg)
 		case CtaIpV4Dst:
-			conn.Dst = net.IP(attr.Msg) // TODO: copy so we can reuse the buffer?
+			conn.Dst = make(net.IP, len(attr.Msg))
+			copy(conn.Dst, attr.Msg)
 		case CtaIpV6Src:
 			// TODO
 		case CtaIpV6Dst:
