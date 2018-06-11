@@ -86,6 +86,18 @@ func queryAllConnections(cb func(Conn)) error {
 	return readMsgs(s, cb)
 }
 
+// Stream all connections instead of query for all of them at once.
+func StreamAllConnections() chan Conn {
+	ch := make(chan Conn, 1)
+	go func() {
+		queryAllConnections(func(c Conn) {
+			ch <- c
+		})
+		close(ch)
+	}()
+	return ch
+}
+
 // Lists all the connections that conntrack is tracking.
 func Connections() ([]Conn, error) {
 	var conns []Conn
