@@ -14,7 +14,7 @@ CONNTRACK_ENUMS=nf_conntrack_query \
 
 LINUX_ENUMS=cntl_msg_types \
 
-all: test vet lint
+all: test vet
 
 test:
 	go test

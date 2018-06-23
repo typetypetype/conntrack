@@ -12,7 +12,7 @@ import (
 func main() {
 	cs, err := conntrack.Established()
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("Established: %s", err))
 	}
 	fmt.Printf("Established on start:\n")
 	for _, cn := range cs {

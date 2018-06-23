@@ -3,26 +3,23 @@ package conntrack
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
-type nfgenmsg struct {
-	Family  uint8  /* AF_xxx */
-	Version uint8  /* nfnetlink version */
-	ResID   uint16 /* resource id */
-}
-
 const (
-	sizeofGenmsg = uint32(unsafe.Sizeof(nfgenmsg{})) // TODO
+	sizeofGenmsg = uint32(unsafe.Sizeof(unix.Nfgenmsg{})) // TODO
 )
 
 type ConntrackListReq struct {
 	Header syscall.NlMsghdr
-	Body   nfgenmsg
+	Body   unix.Nfgenmsg
 }
 
 func (c *ConntrackListReq) toWireFormat() []byte {
@@ -33,9 +30,9 @@ func (c *ConntrackListReq) toWireFormat() []byte {
 	*(*uint16)(unsafe.Pointer(&b[6:8][0])) = c.Header.Flags
 	*(*uint32)(unsafe.Pointer(&b[8:12][0])) = c.Header.Seq
 	*(*uint32)(unsafe.Pointer(&b[12:16][0])) = c.Header.Pid
-	b[16] = byte(c.Body.Family)
+	b[16] = byte(c.Body.Nfgen_family)
 	b[17] = byte(c.Body.Version)
-	*(*uint16)(unsafe.Pointer(&b[18:20][0])) = c.Body.ResID
+	*(*uint16)(unsafe.Pointer(&b[18:20][0])) = c.Body.Res_id
 	return b
 }
 
@@ -71,10 +68,10 @@ func queryAllConnections(cb func(Conn)) error {
 			Pid:   0,
 			Seq:   0,
 		},
-		Body: nfgenmsg{
-			Family:  syscall.AF_INET,
-			Version: NFNETLINK_V0,
-			ResID:   0,
+		Body: unix.Nfgenmsg{
+			Nfgen_family: syscall.AF_INET,
+			Version:      NFNETLINK_V0,
+			Res_id:       0,
 		},
 	}
 	wb := msg.toWireFormat()
@@ -134,7 +131,7 @@ func Established() ([]ConnTCP, error) {
 func Follow() (<-chan Conn, func(), error) {
 	s, _, err := connectNetfilter(
 		NF_NETLINK_CONNTRACK_NEW | NF_NETLINK_CONNTRACK_UPDATE |
-		NF_NETLINK_CONNTRACK_DESTROY)
+			NF_NETLINK_CONNTRACK_DESTROY)
 	stop := func() {
 		syscall.Close(s)
 	}
@@ -160,6 +157,7 @@ func Follow() (<-chan Conn, func(), error) {
 
 func readMsgs(s int, cb func(Conn)) error {
 	rb := make([]byte, 2*syscall.Getpagesize())
+loop:
 	for {
 		nr, _, err := syscall.Recvfrom(s, rb, 0)
 		if err == syscall.ENOBUFS {
@@ -175,9 +173,13 @@ func readMsgs(s int, cb func(Conn)) error {
 			return err
 		}
 		for _, msg := range msgs {
-			if err := nfnlIsError(msg.Header); err != nil {
-				return fmt.Errorf("msg is some error: %s\n", err)
+			if msg.Header.Type == unix.NLMSG_ERROR {
+				return errors.New("NLMSG_ERROR")
 			}
+			if msg.Header.Type == unix.NLMSG_DONE {
+				break loop
+			}
+
 			if nflnSubsysID(msg.Header.Type) != NFNL_SUBSYS_CTNETLINK {
 				return fmt.Errorf(
 					"unexpected subsys_id: %d\n",
@@ -201,8 +203,13 @@ func readMsgs(s int, cb func(Conn)) error {
 			}
 
 			cb(*conn)
+
+			if msg.Header.Flags&unix.NLM_F_MULTI > 0 {
+				break loop
+			}
 		}
 	}
+	return nil
 }
 
 type Conn struct {
@@ -215,9 +222,9 @@ type Conn struct {
 	TCPState string
 
 	// ICMP stuff.
-	SrcIcmpId   uint16
-	SrcIcmpType uint8
-	SrcIcmpCode uint8
+	SrcIcmpId    uint16
+	SrcIcmpType  uint8
+	SrcIcmpCode  uint8
 	DestIcmpId   uint16
 	DestIcmpType uint8
 	DestIcmpCode uint8
@@ -232,10 +239,10 @@ type Conn struct {
 	Zone uint16
 
 	// Flow stats.
-	ReplyPktLen uint64
+	ReplyPktLen   uint64
 	ReplyPktCount uint64
-	OrigPktLen uint64
-	OrigPktCount uint64
+	OrigPktLen    uint64
+	OrigPktCount  uint64
 
 	// Error, if any.
 	Err error
