@@ -67,7 +67,9 @@ func (c *ConnTrack) track() error {
 	// We use Follow() to keep track of conn state changes, but it doesn't give
 	// us the initial state. If we first look at the established connections
 	// and then start the follow process we might miss events.
-	events, stop, err := Follow()
+	var flags uint32 = NF_NETLINK_CONNTRACK_NEW | NF_NETLINK_CONNTRACK_UPDATE |
+		NF_NETLINK_CONNTRACK_DESTROY
+	events, stop, err := Follow(flags)
 	if err != nil {
 		return err
 	}

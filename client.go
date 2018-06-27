@@ -128,10 +128,8 @@ func Established() ([]ConnTCP, error) {
 }
 
 // Follow gives a channel with all changes.
-func Follow() (<-chan Conn, func(), error) {
-	s, _, err := connectNetfilter(
-		NF_NETLINK_CONNTRACK_NEW | NF_NETLINK_CONNTRACK_UPDATE |
-			NF_NETLINK_CONNTRACK_DESTROY)
+func Follow(flags uint32) (<-chan Conn, func(), error) {
+	s, _, err := connectNetfilter(flags)
 	stop := func() {
 		syscall.Close(s)
 	}
