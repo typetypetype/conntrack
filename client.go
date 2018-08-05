@@ -218,6 +218,7 @@ type Conn struct {
 	Dst      net.IP
 	DstPort  uint16
 	TCPState string
+	Status   CtStatus
 
 	// ICMP stuff.
 	SrcIcmpId    uint16
@@ -299,9 +300,7 @@ func parsePayload(b []byte) (*Conn, error) {
 		case CtaCountersReply:
 			conn.ReplyPktLen, conn.ReplyPktCount, _ = parseCounters(attr.Msg)
 		case CtaStatus:
-			// These are ip_conntrack_status
-			// status := binary.BigEndian.Uint32(attr.Msg)
-			// fmt.Printf("It's status %d\n", status)
+			conn.Status = CtStatus(binary.BigEndian.Uint32(attr.Msg))
 		case CtaProtoinfo:
 			parseProtoinfo(attr.Msg, conn)
 		case CtaMark:
