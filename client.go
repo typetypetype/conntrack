@@ -1,7 +1,6 @@
 package conntrack
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -210,23 +209,25 @@ loop:
 	return nil
 }
 
-type Conn struct {
-	MsgType  NfConntrackMsg
-	Proto    int
-	Src      net.IP
-	SrcPort  uint16
-	Dst      net.IP
-	DstPort  uint16
-	TCPState string
-	Status   CtStatus
+type Tuple struct {
+	Proto   int
+	Src     net.IP
+	SrcPort uint16
+	Dst     net.IP
+	DstPort uint16
 
 	// ICMP stuff.
-	SrcIcmpId    uint16
-	SrcIcmpType  uint8
-	SrcIcmpCode  uint8
-	DestIcmpId   uint16
-	DestIcmpType uint8
-	DestIcmpCode uint8
+	IcmpId   uint16
+	IcmpType uint8
+	IcmpCode uint8
+}
+
+type Conn struct {
+	MsgType  NfConntrackMsg
+	TCPState string
+	Status   CtStatus
+	Orig     Tuple
+	Reply    Tuple
 
 	// ct.mark, used to set permission type of the flow.
 	CtMark uint32
@@ -252,28 +253,28 @@ func (c Conn) ConnTCP(local map[string]struct{}) *ConnTCP {
 	// conntrack gives us all connections, even things passing through, but it
 	// doesn't tell us what the local IP is. So we use `local` as a guide
 	// what's local.
-	src := c.Src.String()
-	dst := c.Dst.String()
+	src := c.Orig.Src.String()
+	dst := c.Orig.Dst.String()
 	_, srcLocal := local[src]
 	_, dstLocal := local[dst]
 	// If both are local we must just order things predictably.
 	if srcLocal && dstLocal {
-		srcLocal = c.SrcPort < c.DstPort
+		srcLocal = c.Orig.SrcPort < c.Orig.DstPort
 	}
 	if srcLocal {
 		return &ConnTCP{
 			Local:      src,
-			LocalPort:  strconv.Itoa(int(c.SrcPort)),
+			LocalPort:  strconv.Itoa(int(c.Orig.SrcPort)),
 			Remote:     dst,
-			RemotePort: strconv.Itoa(int(c.DstPort)),
+			RemotePort: strconv.Itoa(int(c.Orig.DstPort)),
 		}
 	}
 	if dstLocal {
 		return &ConnTCP{
 			Local:      dst,
-			LocalPort:  strconv.Itoa(int(c.DstPort)),
+			LocalPort:  strconv.Itoa(int(c.Orig.DstPort)),
 			Remote:     src,
-			RemotePort: strconv.Itoa(int(c.SrcPort)),
+			RemotePort: strconv.Itoa(int(c.Orig.SrcPort)),
 		}
 	}
 	// Neither is local. conntrack also reports NAT connections.
@@ -287,14 +288,12 @@ func parsePayload(b []byte) (*Conn, error) {
 	if err != nil {
 		return conn, err
 	}
-	conn.Dst = nil
-	conn.Src = nil
 	for _, attr := range attrs {
 		switch CtattrType(attr.Typ) {
 		case CtaTupleOrig:
-			parseTuple(attr.Msg, conn, true /* isSrc */)
+			parseTuple(attr.Msg, &conn.Orig)
 		case CtaTupleReply:
-			parseTuple(attr.Msg, conn, false /* isSrc */)
+			parseTuple(attr.Msg, &conn.Reply)
 		case CtaCountersOrig:
 			conn.OrigPktLen, conn.OrigPktCount, _ = parseCounters(attr.Msg)
 		case CtaCountersReply:
@@ -314,7 +313,7 @@ func parsePayload(b []byte) (*Conn, error) {
 	return conn, nil
 }
 
-func parseTuple(b []byte, conn *Conn, isSrc bool) error {
+func parseTuple(b []byte, tuple *Tuple) error {
 	attrs, err := parseAttrs(b)
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
@@ -326,12 +325,12 @@ func parseTuple(b []byte, conn *Conn, isSrc bool) error {
 			// fmt.Printf("It's a tuple unspec\n")
 		case CtaTupleIp:
 			// fmt.Printf("It's a tuple IP\n")
-			if err := parseIP(attr.Msg, conn); err != nil {
+			if err := parseIP(attr.Msg, tuple); err != nil {
 				return err
 			}
 		case CtaTupleProto:
 			// fmt.Printf("It's a tuple proto\n")
-			parseProto(attr.Msg, conn, isSrc)
+			parseProto(attr.Msg, tuple)
 		}
 	}
 	return nil
@@ -355,7 +354,7 @@ func parseCounters(b []byte) (uint64, uint64, error) {
 	return packets, bytes, nil
 }
 
-func parseIP(b []byte, conn *Conn) error {
+func parseIP(b []byte, tuple *Tuple) error {
 	attrs, err := parseAttrs(b)
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
@@ -363,11 +362,11 @@ func parseIP(b []byte, conn *Conn) error {
 	for _, attr := range attrs {
 		switch CtattrIp(attr.Typ) {
 		case CtaIpV4Src:
-			conn.Src = make(net.IP, len(attr.Msg))
-			copy(conn.Src, attr.Msg)
+			tuple.Src = make(net.IP, len(attr.Msg))
+			copy(tuple.Src, attr.Msg)
 		case CtaIpV4Dst:
-			conn.Dst = make(net.IP, len(attr.Msg))
-			copy(conn.Dst, attr.Msg)
+			tuple.Dst = make(net.IP, len(attr.Msg))
+			copy(tuple.Dst, attr.Msg)
 		case CtaIpV6Src:
 			// TODO
 		case CtaIpV6Dst:
@@ -377,7 +376,7 @@ func parseIP(b []byte, conn *Conn) error {
 	return nil
 }
 
-func parseProto(b []byte, conn *Conn, isSrc bool) error {
+func parseProto(b []byte, tuple *Tuple) error {
 	attrs, err := parseAttrs(b)
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
@@ -387,35 +386,21 @@ func parseProto(b []byte, conn *Conn, isSrc bool) error {
 		switch CtattrL4proto(attr.Typ) {
 		// Protocol number.
 		case CtaProtoNum:
-			conn.Proto = int(uint8(attr.Msg[0]))
+			tuple.Proto = int(uint8(attr.Msg[0]))
 
 		// TCP stuff.
 		case CtaProtoSrcPort:
-			conn.SrcPort = binary.BigEndian.Uint16(attr.Msg)
+			tuple.SrcPort = binary.BigEndian.Uint16(attr.Msg)
 		case CtaProtoDstPort:
-			conn.DstPort = binary.BigEndian.Uint16(attr.Msg)
+			tuple.DstPort = binary.BigEndian.Uint16(attr.Msg)
 
 		// ICMP stuff.
 		case CtaProtoIcmpId:
-			if isSrc {
-				conn.SrcIcmpId = binary.BigEndian.Uint16(attr.Msg)
-			} else {
-				conn.DestIcmpId = binary.BigEndian.Uint16(attr.Msg)
-			}
+			tuple.IcmpId = binary.BigEndian.Uint16(attr.Msg)
 		case CtaProtoIcmpType:
-			bufreader := bytes.NewReader(attr.Msg)
-			if isSrc {
-				binary.Read(bufreader, binary.BigEndian, &conn.SrcIcmpType)
-			} else {
-				binary.Read(bufreader, binary.BigEndian, &conn.DestIcmpType)
-			}
+			tuple.IcmpType = attr.Msg[0]
 		case CtaProtoIcmpCode:
-			bufreader := bytes.NewReader(attr.Msg)
-			if isSrc {
-				binary.Read(bufreader, binary.BigEndian, &conn.SrcIcmpCode)
-			} else {
-				binary.Read(bufreader, binary.BigEndian, &conn.DestIcmpCode)
-			}
+			tuple.IcmpCode = attr.Msg[0]
 		}
 	}
 
