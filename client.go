@@ -303,7 +303,8 @@ func (c Conn) ConnTCP(local map[string]struct{}) *ConnTCP {
 func parsePayload(b []byte) (*Conn, error) {
 	// Most of this comes from libnetfilter_conntrack/src/conntrack/parse_mnl.c
 	conn := &Conn{}
-	attrs, err := parseAttrs(b)
+	var attrSpace [16]Attr
+	attrs, err := parseAttrs(b, attrSpace[0:0])
 	if err != nil {
 		return conn, err
 	}
@@ -333,7 +334,8 @@ func parsePayload(b []byte) (*Conn, error) {
 }
 
 func parseTuple(b []byte, tuple *Tuple) error {
-	attrs, err := parseAttrs(b)
+	var attrSpace [16]Attr
+	attrs, err := parseAttrs(b, attrSpace[0:0])
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
 	}
@@ -356,7 +358,8 @@ func parseTuple(b []byte, tuple *Tuple) error {
 }
 
 func parseCounters(b []byte) (uint64, uint64, error) {
-	attrs, err := parseAttrs(b)
+	var attrSpace [16]Attr
+	attrs, err := parseAttrs(b, attrSpace[0:0])
 	if err != nil {
 		return 0, 0, fmt.Errorf("invalid tuple attr: %s", err)
 	}
@@ -374,7 +377,8 @@ func parseCounters(b []byte) (uint64, uint64, error) {
 }
 
 func parseIP(b []byte, tuple *Tuple) error {
-	attrs, err := parseAttrs(b)
+	var attrSpace [16]Attr
+	attrs, err := parseAttrs(b, attrSpace[0:0])
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
 	}
@@ -396,7 +400,8 @@ func parseIP(b []byte, tuple *Tuple) error {
 }
 
 func parseProto(b []byte, tuple *Tuple) error {
-	attrs, err := parseAttrs(b)
+	var attrSpace [16]Attr
+	attrs, err := parseAttrs(b, attrSpace[0:0])
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
 	}
@@ -427,7 +432,8 @@ func parseProto(b []byte, tuple *Tuple) error {
 }
 
 func parseProtoinfo(b []byte, conn *Conn) error {
-	attrs, err := parseAttrs(b)
+	var attrSpace [16]Attr
+	attrs, err := parseAttrs(b, attrSpace[0:0])
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
 	}
@@ -445,7 +451,8 @@ func parseProtoinfo(b []byte, conn *Conn) error {
 }
 
 func parseProtoinfoTCP(b []byte, conn *Conn) error {
-	attrs, err := parseAttrs(b)
+	var attrSpace [16]Attr
+	attrs, err := parseAttrs(b, attrSpace[0:0])
 	if err != nil {
 		return fmt.Errorf("invalid tuple attr: %s", err)
 	}
