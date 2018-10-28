@@ -147,8 +147,10 @@ func Follow(flags uint32) (<-chan Conn, func(), error) {
 
 // Follow gives a channel with all changes, , using specified netlink buffer size.
 func FollowSize(bufferSize int, flags uint32) (<-chan Conn, func(), error) {
+	var closing bool
 	s, _, err := connectNetfilter(bufferSize, flags)
 	stop := func() {
+		closing = true
 		syscall.Close(s)
 	}
 	if err != nil {
@@ -164,7 +166,7 @@ func FollowSize(bufferSize int, flags uint32) (<-chan Conn, func(), error) {
 			// continue
 			// }
 			res <- c
-		}); err != nil {
+		}); err != nil && !closing {
 			panic(err)
 		}
 	}()
