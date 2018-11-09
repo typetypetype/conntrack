@@ -221,10 +221,6 @@ loop:
 			}
 
 			cb(*conn)
-
-			if msg.Header.Flags&unix.NLM_F_MULTI > 0 {
-				break loop
-			}
 		}
 	}
 	return nil
