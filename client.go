@@ -35,8 +35,8 @@ func (c *ConntrackListReq) toWireFormat() []byte {
 	return b
 }
 
-func connectNetfilter(bufferSize int, groups uint32) (int, *syscall.SockaddrNetlink, error) {
-	s, err := syscall.Socket(syscall.AF_NETLINK, syscall.SOCK_RAW, syscall.NETLINK_NETFILTER)
+func ConnectSocket(bufferSize int, groups uint32, proto int) (int, *syscall.SockaddrNetlink, error) {
+	s, err := syscall.Socket(syscall.AF_NETLINK, syscall.SOCK_RAW, proto)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -62,7 +62,7 @@ func connectNetfilter(bufferSize int, groups uint32) (int, *syscall.SockaddrNetl
 
 // Make syscall asking for all connections. Invoke 'cb' for each connection.
 func queryAllConnections(bufferSize int, cb func(Conn)) error {
-	s, lsa, err := connectNetfilter(bufferSize, 0)
+	s, lsa, err := ConnectSocket(bufferSize, 0, syscall.NETLINK_NETFILTER)
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func Follow(flags uint32) (<-chan Conn, func(), error) {
 // Follow gives a channel with all changes, , using specified netlink buffer size.
 func FollowSize(bufferSize int, flags uint32) (<-chan Conn, func(), error) {
 	var closing bool
-	s, _, err := connectNetfilter(bufferSize, flags)
+	s, _, err := ConnectSocket(bufferSize, flags, syscall.NETLINK_NETFILTER)
 	stop := func() {
 		closing = true
 		syscall.Close(s)
